@@ -323,15 +323,19 @@ let encode m =
       section "function" (vec func) fs (fs <> [])
 
     (* Table section *)
-    let table_section tab =
-      section "table" (vec var) tab (tab <> [])
-
-    (* Memory section *)
     let limits lim =
       let {min; max} = lim.it in
       bool (max <> None); vu64 min; opt vu64 max
 
-    let memory mem =
+    let table (tab : table) =
+      op 0x20;
+      limits tab.it.limits
+
+    let table_section tabo =
+      section "table" (opt table) tabo (tabo <> None)
+
+    (* Memory section *)
+    let memory (mem : memory) =
       limits mem.it.limits
 
     let memory_section memo =
@@ -374,13 +378,22 @@ let encode m =
     let code_section fs =
       section "code" (vec code) fs (fs <> [])
 
+    (* Element section *)
+    let table_segment seg =
+      let {offset; elems} = seg.it in
+      vu32 offset; list var elems
+
+    let elem_section segs =
+      section "element" (opt (vec table_segment))
+        segs (segs <> None && segs <> Some [])
+
     (* Data section *)
-    let segment seg =
-      let {Memory.addr; data} = seg.it in
+    let memory_segment seg =
+      let {addr; data} = seg.it in
       vu64 addr; string data
 
     let data_section segs =
-      section "data" (opt (vec segment))
+      section "data" (opt (vec memory_segment))
         segs (segs <> None && segs <> Some [])
 
     (* Module *)
@@ -396,6 +409,9 @@ let encode m =
       export_section m.it.exports;
       start_section m.it.start;
       code_section m.it.funcs;
-      data_section (Lib.Option.map (fun mem -> mem.it.segments) m.it.memory)
+      elem_section
+        (Lib.Option.map (fun (tab : table) -> tab.it.segments) m.it.table);
+      data_section
+        (Lib.Option.map (fun (mem : memory) -> mem.it.segments) m.it.memory)
   end
   in E.module_ m; to_string s

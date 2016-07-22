@@ -446,6 +446,7 @@ let id s =
   | "export" -> `ExportSection
   | "start" -> `StartSection
   | "code" -> `CodeSection
+  | "element" -> `ElemSection
   | "data" -> `DataSection
   | _ -> `UnknownSection
 
@@ -487,21 +488,25 @@ let func_section s =
 
 (* Table section *)
 
-let table_section s =
-  section `TableSection (vec (at var)) [] s
-
-
-(* Memory section *)
-
 let limits s =
   let has_max = bool s in
   let min = vu64 s in
   let max = opt vu64 has_max s in
   {min; max}
 
+let table s =
+  let lim = at limits s in
+  {limits = lim; segments = []} : table
+
+let table_section s =
+  section `TableSection (opt (at table) true) None s
+
+
+(* Memory section *)
+
 let memory s =
   let lim = at limits s in
-  {limits = lim; segments = []}
+  {limits = lim; segments = []} : memory
 
 let memory_section s =
   section `MemorySection (opt (at memory) true) None s
@@ -541,15 +546,26 @@ let code_section s =
   section `CodeSection (vec (at code)) [] s
 
 
+(* Element section *)
+
+let table_segment s =
+  let offset = vu32 s in
+  let elems = list (at var) s in
+  {offset; elems}
+
+let elem_section s =
+  section `ElemSection (vec (at table_segment)) [] s
+
+
 (* Data section *)
 
-let segment s =
+let memory_segment s =
   let addr = vu64 s in
   let data = string s in
   {Memory.addr; data}
 
 let data_section s =
-  section `DataSection (vec (at segment)) [] s
+  section `DataSection (vec (at memory_segment)) [] s
 
 
 (* Unknown section *)
@@ -574,7 +590,7 @@ let module_ s =
   iterate unknown_section s;
   let func_types = func_section s in
   iterate unknown_section s;
-  let table = table_section s in
+  let table_limits = table_section s in
   iterate unknown_section s;
   let memory_limits = memory_section s in
   iterate unknown_section s;
@@ -584,23 +600,33 @@ let module_ s =
   iterate unknown_section s;
   let func_bodies = code_section s in
   iterate unknown_section s;
-  let segments = data_section s in
+  let table_segments = elem_section s in
+  iterate unknown_section s;
+  let memory_segments = data_section s in
   iterate unknown_section s;
   (*TODO: name section*)
   iterate unknown_section s;
   require (pos s = len s) s (len s) "junk after last section";
   require (List.length func_types = List.length func_bodies)
     s (len s) "function and code section have inconsistent lengths";
-  require (memory_limits <> None || segments = [])
-    s (len s) "data section without memory section";
   let funcs =
     List.map2 Source.(fun t f -> {f.it with ftype = t} @@ f.at)
       func_types func_bodies in
+  let table =
+    match table_limits with
+    | None ->
+      require (table_segments = [])
+        s (len s) "element section without memory section";
+    | Some table -> Some Source.({table.it with segments} @@ table.at)
+  in
   let memory =
     match memory_limits with
-    | None -> None
+    | None ->
+      require (memory_segments = [])
+        s (len s) "data section without memory section";
     | Some memory -> Some Source.({memory.it with segments} @@ memory.at)
-  in {memory; types; funcs; imports; exports; table; start}
+  in
+  {memory; types; funcs; imports; exports; table; start}
 
 
 let decode name bs = at module_ (stream name bs)

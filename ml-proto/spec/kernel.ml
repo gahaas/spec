@@ -116,7 +116,7 @@ and func' =
 }
 
 
-(* Modules *)
+(* Memories & tables *)
 
 type limits = limits' Source.phrase
 and limits' =
@@ -125,14 +125,36 @@ and limits' =
   max : Memory.size option;
 }
 
-type segment = Memory.segment Source.phrase
+type memory_segment = memory_segment' Source.phrase
+and memory_segment' = Memory.segment =
+{
+  addr : Memory.address;
+  data : string;
+}
 
 type memory = memory' Source.phrase
 and memory' =
 {
   limits : limits;
-  segments : segment list;
+  segments : memory_segment list;
 }
+
+type table_segment = table_segment' Source.phrase
+and table_segment' =
+{
+  offset : int32;
+  elems : var list;
+}
+
+type table = table' Source.phrase
+and table' =
+{
+  limits : limits;
+  segments : table_segment list;
+}
+
+
+(* Modules *)
 
 type export = export' Source.phrase
 and export' =
@@ -152,11 +174,11 @@ and import' =
 type module_ = module_' Source.phrase
 and module_' =
 {
-  memory : memory option;
   types : Types.func_type list;
+  table : table option;
+  memory : memory option;
   funcs : func list;
   start : var option;
   imports : import list;
   exports : export list;
-  table : var list;
 }
