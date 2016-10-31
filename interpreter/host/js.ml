@@ -159,7 +159,7 @@ let assert_return lits ts at =
 
 let assert_return_nan ts at =
 	let var i = Int32.of_int i @@ at in
-	let init i t = [GetLocal (var i) @@ at; SetLocal (var i) @@ at] in
+	let init i t = [SetLocal (var i) @@ at] in
   let test i t =
     [ GetLocal (var i) @@ at;
       GetLocal (var i) @@ at;
